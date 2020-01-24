@@ -17,6 +17,7 @@
 
 
 
+#include <memory.h>
 #include <stdio.h>
 
 
@@ -83,7 +84,12 @@ __host__ __device__ inline long random_next_long (Random *random) {
 }
 
 // advance
-#define advance_m1(rand) ((rand) = ((rand) * 0xDFE05BCB1365LL + 0x615C0E462AA9LL) & RANDOM_MASK)
+#define advance(rand, multiplier, addend) ((rand) = ((rand) * (multiplier) + (addend)) & RANDOM_MASK)
+#define advance_830(rand) advance(rand, 0x859D39E832D9LL, 0xE3E2DF5E9196LL)
+#define advance_774(rand) advance(rand, 0xF8D900133F9LL, 0x5738CAC2F85ELL)
+#define advance_387(rand) advance(rand, 0x5FE2BCEF32B5LL, 0xB072B3BF0CBDLL)
+#define advance_8(rand) advance(rand, 0x75489F259F21LL, 0x7CBA449AE648LL)
+#define advance_m1(rand) advance(rand, 0xDFE05BCB1365LL, 0x615C0E462AA9LL)
 
 
 
@@ -92,7 +98,19 @@ __host__ __device__ inline long random_next_long (Random *random) {
 #define TREE_HEIGHT 3
 
 #define OTHER_TREE_COUNT 1
-__constant__ const int OTHER_TREE_XS[OTHER_TREE_COUNT] = { 1 };
+__device__ inline int getTreeHeight(int x, int z) {
+    if (x == TREE_X && z == TREE_Z)
+        return TREE_HEIGHT;
+
+    if (x == 1 && z == 1)
+        return 4;
+
+    return 0;
+}
+
+#define WATERFALL_X 0
+#define WATERFALL_Y 76
+#define WATERFALL_Z 2
 
 
 
@@ -121,6 +139,9 @@ __constant__ const int OTHER_TREE_XS[OTHER_TREE_COUNT] = { 1 };
 #define SIZE_Z (UPPER_Z - LOWER_Z + 1)
 #define TOTAL_WORK_SIZE (SIZE_X * SIZE_Z)
 
+#define MAX_TREE_ATTEMPTS 12
+#define MAX_TREE_SEARCH_BACK (MAX_TREE_ATTEMPTS - 1 + 16 * OTHER_TREE_COUNT)
+
 #define WORK_UNIT_SIZE (1LL << 32)
 #define BLOCK_SIZE 256
 
@@ -138,12 +159,63 @@ __global__ void map(ulong offset, bool* result) {
 
     advance_m1(rand);
     Random start = rand;
+    advance_m1(start);
 
     bool res = random_next(&rand, 4) == 0;
     res &= random_next(&rand, 4) == 0;
     res &= random_next_int(&rand, 3) == (ulong) (TREE_HEIGHT - 4);
 
 
+    bool any_back_calls_match = false;
+    for (int treeBackCalls = 0; treeBackCalls <= MAX_TREE_SEARCH_BACK; treeBackCalls++) {
+        rand = start;
+
+        bool this_res = random_next_int(&rand, 10) != 0;
+
+        int treesMatched = 0;
+        for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
+            int treeX = random_next(&rand, 4);
+            int treeZ = random_next(&rand, 4);
+            int wantedTreeHeight = getTreeHeight(treeX, treeZ);
+            int treeHeight = random_next_int(&rand, 3) + 4;
+            if (treeHeight == wantedTreeHeight) {
+                treesMatched++;
+                advance_8(rand);
+            }
+        }
+
+        this_res &= treesMatched >= OTHER_TREE_COUNT + 1;
+
+        // yellow flowers
+        advance_774(rand);
+        // red flowers
+        if (random_next(&rand, 1) == 0) {
+            advance_387(rand);
+        }
+        // brown mushroom
+        if (random_next(&rand, 2) == 0) {
+            advance_387(rand);
+        }
+        // red mushroom
+        if (random_next(&rand, 3) == 0) {
+            advance_387(rand);
+        }
+        // reeds
+        advance_830(rand);
+        // pumpkins
+        if (random_next(&rand, 5) == 0) {
+            advance_387(rand);
+        }
+
+        this_res &= random_next(&rand, 4) == WATERFALL_X;
+        this_res &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
+        this_res &= random_next(&rand, 4) == WATERFALL_Z;
+
+        any_back_calls_match |= this_res;
+
+        advance_m1(start);
+    }
+    res &= any_back_calls_match;
 
     result[global_id] = res;
 
