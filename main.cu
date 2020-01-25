@@ -88,29 +88,36 @@ __host__ __device__ inline long random_next_long (Random *random) {
 #define advance_830(rand) advance(rand, 0x859D39E832D9LL, 0xE3E2DF5E9196LL)
 #define advance_774(rand) advance(rand, 0xF8D900133F9LL, 0x5738CAC2F85ELL)
 #define advance_387(rand) advance(rand, 0x5FE2BCEF32B5LL, 0xB072B3BF0CBDLL)
-#define advance_8(rand) advance(rand, 0x75489F259F21LL, 0x7CBA449AE648LL)
+#define advance_16(rand) advance(rand, 0x6DC260740241LL, 0xD0352014D90LL)
 #define advance_m1(rand) advance(rand, 0xDFE05BCB1365LL, 0x615C0E462AA9LL)
 
 
 
-#define TREE_X 0
-#define TREE_Z 0
-#define TREE_HEIGHT 3
+#define TREE_X 4
+#define TREE_Z 3
+#define TREE_HEIGHT 6
 
-#define OTHER_TREE_COUNT 1
-__device__ inline int getTreeHeight(int x, int z) {
+#define OTHER_TREE_COUNT 3
+/*__device__*/ inline int getTreeHeight(int x, int z) {
     if (x == TREE_X && z == TREE_Z)
         return TREE_HEIGHT;
 
-    if (x == 1 && z == 1)
-        return 4;
+    if (x == 1 && z == 13)
+        return 5;
+
+    if (x == 6 && z == 12)
+        return 6;
+
+    if (x == 14 && z == 7) {
+        return 5;
+    }
 
     return 0;
 }
 
-#define WATERFALL_X 0
-#define WATERFALL_Y 76
-#define WATERFALL_Z 2
+#define WATERFALL_X 9
+#define WATERFALL_Y 77
+#define WATERFALL_Z 1
 
 
 
@@ -140,7 +147,7 @@ __device__ inline int getTreeHeight(int x, int z) {
 #define TOTAL_WORK_SIZE (SIZE_X * SIZE_Z)
 
 #define MAX_TREE_ATTEMPTS 12
-#define MAX_TREE_SEARCH_BACK (MAX_TREE_ATTEMPTS - 1 + 16 * OTHER_TREE_COUNT)
+#define MAX_TREE_SEARCH_BACK (3 * MAX_TREE_ATTEMPTS - 3 + 16 * OTHER_TREE_COUNT)
 
 #define WORK_UNIT_SIZE (1LL << 32)
 #define BLOCK_SIZE 256
@@ -156,13 +163,12 @@ __global__ void map(ulong offset, bool* result) {
     signed_seed_t lattice_x = (signed_seed_t) ((offset + global_id) % SIZE_X) + LOWER_X;
     signed_seed_t lattice_z = (signed_seed_t) ((offset + global_id) / SIZE_X) + LOWER_Z;
     Random rand = (Random) ((lattice_x * L00 + lattice_z * L10 + X_TRANSLATE) % MODULUS);
-
     advance_m1(rand);
     Random start = rand;
     advance_m1(start);
 
-    bool res = random_next(&rand, 4) == 0;
-    res &= random_next(&rand, 4) == 0;
+    bool res = random_next(&rand, 4) == TREE_X;
+    res &= random_next(&rand, 4) == TREE_Z;
     res &= random_next_int(&rand, 3) == (ulong) (TREE_HEIGHT - 4);
 
 
@@ -172,19 +178,23 @@ __global__ void map(ulong offset, bool* result) {
 
         bool this_res = random_next_int(&rand, 10) != 0;
 
+        bool generated_tree[16][16];
+        memset(generated_tree, false, sizeof(generated_tree));
+
         int treesMatched = 0;
         for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
             int treeX = random_next(&rand, 4);
             int treeZ = random_next(&rand, 4);
             int wantedTreeHeight = getTreeHeight(treeX, treeZ);
             int treeHeight = random_next_int(&rand, 3) + 4;
-            if (treeHeight == wantedTreeHeight) {
+            if (treeHeight == wantedTreeHeight && !generated_tree[treeX][treeZ]) {
                 treesMatched++;
-                advance_8(rand);
+                generated_tree[treeX][treeZ] = true;
+                advance_16(rand);
             }
         }
 
-        this_res &= treesMatched >= OTHER_TREE_COUNT + 1;
+        this_res &= treesMatched == OTHER_TREE_COUNT + 1;
 
         // yellow flowers
         advance_774(rand);
@@ -207,9 +217,14 @@ __global__ void map(ulong offset, bool* result) {
             advance_387(rand);
         }
 
-        this_res &= random_next(&rand, 4) == WATERFALL_X;
-        this_res &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
-        this_res &= random_next(&rand, 4) == WATERFALL_Z;
+        bool any_waterfall_matches = false;
+        for (int i = 0; i < 50; i++) {
+            bool waterfall_matches = random_next(&rand, 4) == WATERFALL_X;
+            waterfall_matches &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
+            waterfall_matches &= random_next(&rand, 4) == WATERFALL_Z;
+            any_waterfall_matches |= waterfall_matches;
+        }
+        this_res &= any_waterfall_matches;
 
         any_back_calls_match |= this_res;
 
