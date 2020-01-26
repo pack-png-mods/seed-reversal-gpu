@@ -126,12 +126,12 @@ __device__ inline int getTreeHeight(int x, int z) {
 #define X_TRANSLATE 0
 #define Z_TRANSLATE 11
 #define L00 7847617LL
-#define L01 4824621LL
-#define L10 (-18218081LL)
+#define L01 (-18218081LL)
+#define L10 4824621LL
 #define L11 24667315LL
 #define LI00 (24667315.0 / 16)
-#define LI01 (-4824621.0 / 16)
-#define LI10 (18218081.0 / 16)
+#define LI01 (18218081.0 / 16)
+#define LI10 (-4824621.0 / 16)
 #define LI11 (7847617.0 / 16)
 
 #define CONST_FLOOR(x) ((x) < (signed_seed_t) (x) ? (signed_seed_t) (x) - 1 : (signed_seed_t) (x))
@@ -163,7 +163,7 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds) {
 
     signed_seed_t lattice_x = (signed_seed_t) ((offset + global_id) % SIZE_X) + LOWER_X;
     signed_seed_t lattice_z = (signed_seed_t) ((offset + global_id) / SIZE_X) + LOWER_Z;
-    Random rand = (Random) ((lattice_x * L00 + lattice_z * L10 + X_TRANSLATE) % MODULUS);
+    Random rand = (Random) ((lattice_x * L00 + lattice_z * L01 + X_TRANSLATE) % MODULUS);
     advance_m1(rand);
     Random start = rand;
     advance_m1(start);
