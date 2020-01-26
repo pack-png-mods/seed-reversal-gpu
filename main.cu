@@ -116,7 +116,7 @@ __host__ __device__ inline long random_next_long (Random *random) {
 }
 
 #define WATERFALL_X 9
-#define WATERFALL_Y 77
+#define WATERFALL_Y 76
 #define WATERFALL_Z 1
 
 
@@ -182,6 +182,7 @@ __global__ void map(ulong offset, bool* result) {
         memset(generated_tree, false, sizeof(generated_tree));
 
         int treesMatched = 0;
+        bool any_population_matches = false;
         for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
             int treeX = random_next(&rand, 4);
             int treeZ = random_next(&rand, 4);
@@ -192,39 +193,41 @@ __global__ void map(ulong offset, bool* result) {
                 generated_tree[treeX][treeZ] = true;
                 advance_16(rand);
             }
+
+            if (treesMatched == OTHER_TREE_COUNT + 1) {
+                Random before_rest = rand;
+                // yellow flowers
+                advance_774(rand);
+                // red flowers
+                if (random_next(&rand, 1) == 0) {
+                    advance_387(rand);
+                }
+                // brown mushroom
+                if (random_next(&rand, 2) == 0) {
+                    advance_387(rand);
+                }
+                // red mushroom
+                if (random_next(&rand, 3) == 0) {
+                    advance_387(rand);
+                }
+                // reeds
+                advance_830(rand);
+                // pumpkins
+                if (random_next(&rand, 5) == 0) {
+                    advance_387(rand);
+                }
+
+                for (int i = 0; i < 50; i++) {
+                    bool waterfall_matches = random_next(&rand, 4) == WATERFALL_X;
+                    waterfall_matches &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
+                    waterfall_matches &= random_next(&rand, 4) == WATERFALL_Z;
+                    any_population_matches |= waterfall_matches;
+                }
+                rand = before_rest;
+            }
         }
 
-        this_res &= treesMatched == OTHER_TREE_COUNT + 1;
-
-        // yellow flowers
-        advance_774(rand);
-        // red flowers
-        if (random_next(&rand, 1) == 0) {
-            advance_387(rand);
-        }
-        // brown mushroom
-        if (random_next(&rand, 2) == 0) {
-            advance_387(rand);
-        }
-        // red mushroom
-        if (random_next(&rand, 3) == 0) {
-            advance_387(rand);
-        }
-        // reeds
-        advance_830(rand);
-        // pumpkins
-        if (random_next(&rand, 5) == 0) {
-            advance_387(rand);
-        }
-
-        bool any_waterfall_matches = false;
-        for (int i = 0; i < 50; i++) {
-            bool waterfall_matches = random_next(&rand, 4) == WATERFALL_X;
-            waterfall_matches &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
-            waterfall_matches &= random_next(&rand, 4) == WATERFALL_Z;
-            any_waterfall_matches |= waterfall_matches;
-        }
-        this_res &= any_waterfall_matches;
+        this_res &= any_population_matches;
 
         any_back_calls_match |= this_res;
 
