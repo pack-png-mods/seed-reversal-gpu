@@ -90,6 +90,7 @@ __host__ __device__ inline long random_next_long (Random *random) {
 #define advance_387(rand) advance(rand, 0x5FE2BCEF32B5LL, 0xB072B3BF0CBDLL)
 #define advance_16(rand) advance(rand, 0x6DC260740241LL, 0xD0352014D90LL)
 #define advance_m1(rand) advance(rand, 0xDFE05BCB1365LL, 0x615C0E462AA9LL)
+#define advance_m3759(rand) advance(rand, 0x63A9985BE4ADLL, 0xA9AA8DA9BC9BLL)
 
 
 
@@ -98,7 +99,7 @@ __host__ __device__ inline long random_next_long (Random *random) {
 #define TREE_HEIGHT 6
 
 #define OTHER_TREE_COUNT 3
-/*__device__*/ inline int getTreeHeight(int x, int z) {
+__device__ inline int getTreeHeight(int x, int z) {
     if (x == TREE_X && z == TREE_Z)
         return TREE_HEIGHT;
 
@@ -149,12 +150,12 @@ __host__ __device__ inline long random_next_long (Random *random) {
 #define MAX_TREE_ATTEMPTS 12
 #define MAX_TREE_SEARCH_BACK (3 * MAX_TREE_ATTEMPTS - 3 + 16 * OTHER_TREE_COUNT)
 
-#define WORK_UNIT_SIZE (1LL << 32)
+#define WORK_UNIT_SIZE (1LL << 20)
 #define BLOCK_SIZE 256
 
 
 
-__global__ void map(ulong offset, bool* result) {
+__global__ void doWork(ulong offset, int* num_seeds, ulong* seeds) {
     // lattice tree position
     ulong global_id = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -172,11 +173,11 @@ __global__ void map(ulong offset, bool* result) {
     res &= random_next_int(&rand, 3) == (ulong) (TREE_HEIGHT - 4);
 
 
-    bool any_back_calls_match = false;
     for (int treeBackCalls = 0; treeBackCalls <= MAX_TREE_SEARCH_BACK; treeBackCalls++) {
         rand = start;
 
-        bool this_res = random_next_int(&rand, 10) != 0;
+        bool this_res = res;
+        this_res &= random_next_int(&rand, 10) != 0;
 
         bool generated_tree[16][16];
         memset(generated_tree, false, sizeof(generated_tree));
@@ -229,35 +230,46 @@ __global__ void map(ulong offset, bool* result) {
 
         this_res &= any_population_matches;
 
-        any_back_calls_match |= this_res;
+        Random start_chunk_rand = start;
+        advance_m3759(start_chunk_rand);
+        if (this_res) {
+            int index = atomicAdd(num_seeds, 1);
+            seeds[index] = start_chunk_rand;
+        }
 
         advance_m1(start);
     }
-    res &= any_back_calls_match;
-
-    result[global_id] = res;
 
 }
 
 int main() {
-    printf("%f\n", LI01);
-    printf("[%lld, %lld, %lld, %lld]: %lld * %lld = %lld\n", LOWER_X, LOWER_Z, UPPER_X, UPPER_Z, SIZE_X, SIZE_Z, TOTAL_WORK_SIZE);
+    printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
+
+    FILE* out_file = fopen("chunk_seeds.txt", "w");
 
 
-    bool* result;
-    cudaMallocManaged(&result, WORK_UNIT_SIZE);
+    int* num_seeds;
+    cudaMallocManaged(&num_seeds, sizeof(*num_seeds));
 
+    ulong* seeds;
+    cudaMallocManaged(&seeds, (1LL << 30)); // approx 1gb
 
     ulong count = 0;
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE; offset += WORK_UNIT_SIZE) {
-        map <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, result);
+        *num_seeds = 0;
+
+        doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, num_seeds, seeds);
         cudaDeviceSynchronize();
 
-        for (ulong i = 0; i < WORK_UNIT_SIZE; i++) {
-            if (result[i])
-                count++;
+        for (int i = 0, e = *num_seeds; i < e; i++) {
+            fprintf(out_file, "%lld\n", seeds[i]);
         }
-        printf("%lld\n", count);
+        fflush(out_file);
+
+        count += *num_seeds;
+        printf("Searched %lld seeds, found %lld matches \n", offset + WORK_UNIT_SIZE, count);
     }
+
+    fclose(out_file);
 
 }
