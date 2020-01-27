@@ -1,5 +1,3 @@
-//"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\bin\nvcc.exe"  -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.16.27023\bin\Hostx86\x64" -o main main.cu -O2
-
 // IDE indexing
 #ifdef __JETBRAINS_IDE__
 #define __host__
