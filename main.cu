@@ -126,6 +126,7 @@ __device__ inline int getTreeHeight(int x, int z) {
 
 
 #define MODULUS (1LL << 48)
+#define SQUARE_SIDE (MODULUS / 16)
 #define X_TRANSLATE 0
 #define Z_TRANSLATE 11
 #define L00 7847617LL
@@ -137,17 +138,29 @@ __device__ inline int getTreeHeight(int x, int z) {
 #define LI10 (-4824621.0 / 16)
 #define LI11 (7847617.0 / 16)
 
+#define CONST_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define CONST_MIN4(a, b, c, d) CONST_MIN(CONST_MIN(a, b), CONST_MIN(c, d))
+#define CONST_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define CONST_MAX4(a, b, c, d) CONST_MAX(CONST_MAX(a, b), CONST_MAX(c, d))
 #define CONST_FLOOR(x) ((x) < (signed_seed_t) (x) ? (signed_seed_t) (x) - 1 : (signed_seed_t) (x))
 #define CONST_CEIL(x) ((x) == (signed_seed_t) (x) ? (signed_seed_t) (x) : CONST_FLOOR((x) + 1))
 #define CONST_LOWER(x, m, c) ((m) < 0 ? ((x) + 1 - (double) (c) / MODULUS) * (m) : ((x) - (double) (c) / MODULUS) * (m))
 #define CONST_UPPER(x, m, c) ((m) < 0 ? ((x) - (double) (c) / MODULUS) * (m) : ((x) + 1 - (double) (c) / MODULUS) * (m))
 
-#define LOWER_X CONST_FLOOR(CONST_LOWER(TREE_X, LI00, X_TRANSLATE) + CONST_LOWER(TREE_Z, LI01, Z_TRANSLATE))
-#define LOWER_Z CONST_FLOOR(CONST_LOWER(TREE_X, LI10, X_TRANSLATE) + CONST_LOWER(TREE_Z, LI11, Z_TRANSLATE))
-#define UPPER_X CONST_CEIL(CONST_UPPER(TREE_X, LI00, X_TRANSLATE) + CONST_UPPER(TREE_Z, LI01, Z_TRANSLATE))
-#define UPPER_Z CONST_CEIL(CONST_UPPER(TREE_X, LI10, X_TRANSLATE) + CONST_UPPER(TREE_Z, LI11, Z_TRANSLATE))
-#define SIZE_X (UPPER_X - LOWER_X + 1)
-#define SIZE_Z (UPPER_Z - LOWER_Z + 1)
+// for a parallelogram ABCD https://media.discordapp.net/attachments/668607204009574411/671018577561649163/unknown.png
+#define B_X LI00
+#define B_Z LI10
+#define C_X (LI00 + LI01)
+#define C_Z (LI10 + LI11)
+#define D_X LI01
+#define D_Z LI11
+#define LOWER_X CONST_MIN4(0, B_X, C_X, D_X)
+#define LOWER_Z CONST_MIN4(0, B_Z, C_Z, D_Z)
+#define UPPER_X CONST_MAX4(0, B_X, C_X, D_X)
+#define UPPER_Z CONST_MAX4(0, B_Z, C_Z, D_Z)
+#define ORIG_SIZE_X (UPPER_X - LOWER_X + 1)
+#define SIZE_X CONST_CEIL(ORIG_SIZE_X - D_X)
+#define SIZE_Z CONST_CEIL(UPPER_Z - LOWER_Z + 1)
 #define TOTAL_WORK_SIZE (SIZE_X * SIZE_Z)
 
 #define MAX_TREE_ATTEMPTS 12
@@ -166,6 +179,13 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds) {
 
     signed_seed_t lattice_x = (signed_seed_t) ((offset + global_id) % SIZE_X) + LOWER_X;
     signed_seed_t lattice_z = (signed_seed_t) ((offset + global_id) / SIZE_X) + LOWER_Z;
+    lattice_z += (B_X * lattice_z < B_Z * lattice_x) * SIZE_Z;
+    if (D_X * lattice_z > D_Z * lattice_x) {
+        lattice_x += B_X;
+        lattice_z += B_Z;
+    }
+    lattice_x += (signed_seed_t) (TREE_X * LI00 + TREE_Z * LI01);
+    lattice_z += (signed_seed_t) (TREE_X * LI10 + TREE_Z * LI11);
     Random rand = (Random) ((lattice_x * L00 + lattice_z * L01 + X_TRANSLATE) % MODULUS);
     advance_m1(rand);
     Random start = rand;
@@ -260,7 +280,7 @@ int main() {
     cudaMallocManaged(&seeds, (1LL << 30)); // approx 1gb
 
     ulong count = 0;
-    for (ulong offset = 0; offset < TOTAL_WORK_SIZE; offset += WORK_UNIT_SIZE) {
+    for (ulong offset = 845100000000LL; offset < TOTAL_WORK_SIZE; offset += WORK_UNIT_SIZE) {
         *num_seeds = 0;
 
         doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, num_seeds, seeds);
@@ -272,7 +292,7 @@ int main() {
         fflush(out_file);
 
         count += *num_seeds;
-        printf("Searched %lld seeds, found %lld matches \n", offset + WORK_UNIT_SIZE, count);
+        printf("Searched %lld seeds, found %lld matches\n", offset + WORK_UNIT_SIZE, count);
     }
 
     fclose(out_file);
