@@ -245,7 +245,9 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds) {
 
 }
 
+#undef int
 int main() {
+#define int int32_t
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
     FILE* out_file = fopen("chunk_seeds.txt", "w");
