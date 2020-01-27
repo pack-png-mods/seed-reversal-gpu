@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <memory.h>
 #include <stdio.h>
+#include <time.h>
 
 
 #define signed_seed_t int64_t
@@ -276,6 +277,7 @@ int main() {
 
 
     ulong count = 0;
+    time_t startTime = time(NULL), currentTime;
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
 
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
@@ -296,7 +298,11 @@ int main() {
             count += *nodes[gpu_index].num_seeds;
         }
 
-        printf("Searched %lld seeds, found %lld matches \n", offset + WORK_UNIT_SIZE, count);
+        time(&currentTime);
+        int timeElapsed = (int)(currentTime - startTime);
+        ulong numSearched = offset + WORK_UNIT_SIZE;
+        double speed = (double)numSearched / (double)timeElapsed / 1000000.0;
+        printf("Searched %lld seeds, found %lld matches . Time elapsed: %ds. Speed: %.2fm seeds/s.\n", numSearched, count, timeElapsed, speed);
     }
 
     fclose(out_file);
