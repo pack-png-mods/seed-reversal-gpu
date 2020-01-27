@@ -321,7 +321,7 @@ int main() {
         timeElapsed /= CLOCKS_PER_SEC;
         ulong numSearched = offset + WORK_UNIT_SIZE;
         double speed = (double)numSearched / (double)timeElapsed / 1000000.0;
-		double progress = (double)numSearched / (double)TOTAL_WORK_SIZE * 100.0;
+        double progress = (double)numSearched / (double)TOTAL_WORK_SIZE * 100.0;
         printf("Searched %lld seeds, found %lld matches. Time elapsed: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%\n", numSearched, count, timeElapsed, speed, progress);
     }
 
