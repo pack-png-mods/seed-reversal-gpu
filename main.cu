@@ -292,16 +292,16 @@ int64_t main() {
 
     FILE* out_file = fopen("chunk_seeds.txt", "w");
 
-	for(int i=0;i<GPU_COUNT;i++)
-	{
-		setup_gpu_node(&nodes[i],i);
-	}
+    for(int i = 0; i< GPU_COUNT; i++)
+    {
+	setup_gpu_node(&nodes[i], i);
+    }
 
 	
     ulong count = 0;
-    for (ulong offset = 845100000000ULL; offset < TOTAL_WORK_SIZE;) {
+    for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
 		
-        for(int GPU_index=0;GPU_index<GPU_COUNT;GPU_index++)
+        for(int GPU_index = 0; GPU_index < GPU_COUNT; GPU_index++)
 		{
 			cudaSetDevice(GPU_index);
 			*(nodes[GPU_index].num_seeds) = 0;
@@ -309,7 +309,7 @@ int64_t main() {
 			offset += WORK_UNIT_SIZE;
 		}
 		
-		for(int GPU_index=0;GPU_index<GPU_COUNT;GPU_index++)
+		for(int GPU_index = 0; GPU_index < GPU_COUNT; GPU_index++)
 		{
 			cudaSetDevice(GPU_index);
 			cudaDeviceSynchronize();
