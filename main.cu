@@ -327,4 +327,3 @@ int main() {
     fclose(out_file);
 
 }
-}
