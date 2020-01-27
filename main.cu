@@ -17,13 +17,16 @@
 
 
 
+#include <stdint.h>
 #include <memory.h>
 #include <stdio.h>
 
 
-#define signed_seed_t long long
-#define uint unsigned int
-#define ulong unsigned signed_seed_t
+#define signed_seed_t int64_t
+#define uint uint32_t
+#define ulong uint64_t
+// let's be EVIL (and make sure all includes come before this)
+#define int int32_t
 
 #undef JRAND_DOUBLE
 
@@ -79,8 +82,8 @@ __host__ __device__ inline uint random_next_int(Random *random, uint bound) {
     return r;
 }
 
-__host__ __device__ inline long random_next_long (Random *random) {
-    return (((long)random_next(random, 32)) << 32) + random_next(random, 32);
+__host__ __device__ inline int64_t random_next_long (Random *random) {
+    return (((int64_t)random_next(random, 32)) << 32) + random_next(random, 32);
 }
 
 // advance
