@@ -278,7 +278,7 @@ void setup_gpu_node(GPU_Node* node, int gpu) {
     cudaSetDevice(gpu);
     node->GPU = gpu;
     cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds));
-    cudaMallocManaged(&node->seeds, (1LL << 30)); // approx 1gb
+    cudaMallocManaged(&node->seeds, (1LL << 10)); // approx 1kb
 }
 
 
