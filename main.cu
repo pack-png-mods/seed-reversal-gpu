@@ -1,3 +1,4 @@
+//"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\bin\nvcc.exe"  -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.16.27023\bin\Hostx86\x64" -o main main.cu -O2
 
 // IDE indexing
 #ifdef __JETBRAINS_IDE__
@@ -262,37 +263,65 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds) {
 
         advance_m1(start);
     }
-
 }
 
+#define GPU_COUNT 1
+
+
 #undef int
-int main() {
 #define int int32_t
+
+struct GPU_Node
+{
+	int GPU;
+	int* num_seeds;
+	ulong* seeds;
+};
+
+void setup_gpu_node(GPU_Node* node, int gpu)
+{
+	cudaSetDevice(gpu);
+	node->GPU=gpu;
+	cudaMallocManaged(&(node->num_seeds), sizeof(*(node->num_seeds)));
+	cudaMallocManaged(&(node->seeds), (1LL << 30)); // approx 1gb
+}
+
+GPU_Node nodes[GPU_COUNT];
+int64_t main() {
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
     FILE* out_file = fopen("chunk_seeds.txt", "w");
 
+	for(int i=0;i<GPU_COUNT;i++)
+	{
+		setup_gpu_node(&nodes[i],i);
+	}
 
-    int* num_seeds;
-    cudaMallocManaged(&num_seeds, sizeof(*num_seeds));
-
-    ulong* seeds;
-    cudaMallocManaged(&seeds, (1LL << 30)); // approx 1gb
-
+	
     ulong count = 0;
-    for (ulong offset = 0; offset < TOTAL_WORK_SIZE; offset += WORK_UNIT_SIZE) {
-        *num_seeds = 0;
-
-        doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, num_seeds, seeds);
-        cudaDeviceSynchronize();
-
-        for (int i = 0, e = *num_seeds; i < e; i++) {
-            fprintf(out_file, "%lld\n", seeds[i]);
-        }
-        fflush(out_file);
-
-        count += *num_seeds;
-        printf("Searched %lld seeds, found %lld matches\n", offset + WORK_UNIT_SIZE, count);
+    for (ulong offset = 845100000000ULL; offset < TOTAL_WORK_SIZE;) {
+		
+        for(int GPU_index=0;GPU_index<GPU_COUNT;GPU_index++)
+		{
+			cudaSetDevice(GPU_index);
+			*(nodes[GPU_index].num_seeds) = 0;
+			doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[GPU_index].num_seeds, nodes[GPU_index].seeds);
+			offset += WORK_UNIT_SIZE;
+		}
+		
+		for(int GPU_index=0;GPU_index<GPU_COUNT;GPU_index++)
+		{
+			cudaSetDevice(GPU_index);
+			cudaDeviceSynchronize();
+			
+			for (int i = 0, e = *(nodes[GPU_index].num_seeds); i < e; i++) {
+				fprintf(out_file, "%lld\n", nodes[GPU_index].seeds[i]);
+			}
+			fflush(out_file);
+			count += *(nodes[GPU_index].num_seeds);
+		}
+		
+		printf("Searched %lld seeds, found %lld matches\n", offset + WORK_UNIT_SIZE, count);
     }
 
     fclose(out_file);
