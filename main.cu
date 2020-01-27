@@ -300,7 +300,7 @@ int main() {
         
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
             cudaSetDevice(gpu_index);
-            *(nodes[gpu_index].num_seeds) = 0;
+            *nodes[gpu_index].num_seeds = 0;
             doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[gpu_index].num_seeds, nodes[gpu_index].seeds);
             offset += WORK_UNIT_SIZE;
         }
