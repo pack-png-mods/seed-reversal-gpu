@@ -309,11 +309,11 @@ int main() {
             cudaSetDevice(gpu_index);
             cudaDeviceSynchronize();
             
-            for (int i = 0, e = *(nodes[gpu_index].num_seeds); i < e; i++) {
+            for (int i = 0, e = *nodes[gpu_index].num_seeds; i < e; i++) {
                 fprintf(out_file, "%lld\n", nodes[gpu_index].seeds[i]);
             }
             fflush(out_file);
-            count += *(nodes[gpu_index].num_seeds);
+            count += *nodes[gpu_index].num_seeds;
         }
         
         printf("Searched %lld seeds, found %lld matches\n", offset + WORK_UNIT_SIZE, count);
