@@ -268,7 +268,6 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds) {
 
 
 
-#define int int32_t
 struct GPU_Node {
     int GPU;
     int* num_seeds;
