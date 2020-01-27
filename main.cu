@@ -1,3 +1,5 @@
+//"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\bin\nvcc.exe"  -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.16.27023\bin\Hostx86\x64" -o main main.cu -O2
+
 // IDE indexing
 #ifdef __JETBRAINS_IDE__
 #define __host__
@@ -277,8 +279,8 @@ struct GPU_Node {
 void setup_gpu_node(GPU_Node* node, int gpu) {
     cudaSetDevice(gpu);
     node->GPU = gpu;
-    cudaMallocManaged(&(node->num_seeds), sizeof(*(node->num_seeds)));
-    cudaMallocManaged(&(node->seeds), (1LL << 30)); // approx 1gb
+    cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds));
+    cudaMallocManaged(&node->seeds, (1LL << 30)); // approx 1gb
 }
 
 
@@ -290,7 +292,7 @@ int main() {
 
     FILE* out_file = fopen("chunk_seeds.txt", "w");
 
-    for(int i=0;i<GPU_COUNT;i++) {
+    for(int i = 0; i < GPU_COUNT; i++) {
         setup_gpu_node(&nodes[i],i);
     }
 
