@@ -152,7 +152,7 @@ __device__ inline int getTreeHeight(int x, int z) {
 #define MAX_TREE_ATTEMPTS 12
 #define MAX_TREE_SEARCH_BACK (3 * MAX_TREE_ATTEMPTS - 3 + 16 * OTHER_TREE_COUNT)
 
-#define WORK_UNIT_SIZE (1LL << 20)
+#define WORK_UNIT_SIZE (1LL << 10)
 #define BLOCK_SIZE 256
 
 
