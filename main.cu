@@ -280,7 +280,7 @@ int main() {
     cudaMallocManaged(&seeds, (1LL << 30)); // approx 1gb
 
     ulong count = 0;
-    for (ulong offset = 845100000000LL; offset < TOTAL_WORK_SIZE; offset += WORK_UNIT_SIZE) {
+    for (ulong offset = 0; offset < TOTAL_WORK_SIZE; offset += WORK_UNIT_SIZE) {
         *num_seeds = 0;
 
         doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, num_seeds, seeds);
