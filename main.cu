@@ -178,7 +178,7 @@ __constant__ ulong search_back_multipliers[MAX_TREE_SEARCH_BACK + 1];
 __constant__ ulong search_back_addends[MAX_TREE_SEARCH_BACK + 1];
 int search_back_count;
 
-#define WORK_UNIT_SIZE (1LL << 20)
+#define WORK_UNIT_SIZE (1LL << 23)
 #define BLOCK_SIZE 256
 
 
