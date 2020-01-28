@@ -89,7 +89,7 @@ __host__ __device__ inline int64_t random_next_long (Random *random) {
 #define CHECK_GPU_ERR(code) gpuAssert((code), __FILE__, __LINE__)
 inline void gpuAssert(cudaError_t code, const char* file, int line) {
     if (code != cudaSuccess) {
-        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        fprintf(stderr, "GPUassert: %s (code %d) %s %d\n", cudaGetErrorString(code), code, file, line);
         exit(code);
     }
 }
