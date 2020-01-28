@@ -86,6 +86,14 @@ __host__ __device__ inline int64_t random_next_long (Random *random) {
     return (((int64_t)random_next(random, 32)) << 32) + random_next(random, 32);
 }
 
+#define CHECK_GPU_ERR(code) gpuAssert((code), __FILE__, __LINE__)
+inline void gpuAssert(cudaError_t code, const char* file, int line) {
+    if (code != cudaSuccess) {
+        fprintf(stderr, "GPUassert: %s (code %d) %s %d\n", cudaGetErrorString(code), code, file, line);
+        exit(code);
+    }
+}
+
 // advance
 #define advance(rand, multiplier, addend) ((rand) = ((rand) * (multiplier) + (addend)) & RANDOM_MASK)
 #define advance_830(rand) advance(rand, 0x859D39E832D9LL, 0xE3E2DF5E9196LL)
@@ -275,10 +283,10 @@ struct GPU_Node {
 };
 
 void setup_gpu_node(GPU_Node* node, int gpu) {
-    cudaSetDevice(gpu);
+    CHECK_GPU_ERR(cudaSetDevice(gpu));
     node->GPU = gpu;
-    cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds));
-    cudaMallocManaged(&node->seeds, (1LL << 10)); // approx 1kb
+    CHECK_GPU_ERR(cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds)));
+    CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (1LL << 10))); // approx 1kb
 }
 
 
@@ -300,15 +308,15 @@ int main() {
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
         
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
-            cudaSetDevice(gpu_index);
+            CHECK_GPU_ERR(cudaSetDevice(gpu_index));
             *nodes[gpu_index].num_seeds = 0;
             doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[gpu_index].num_seeds, nodes[gpu_index].seeds);
             offset += WORK_UNIT_SIZE;
         }
         
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
-            cudaSetDevice(gpu_index);
-            cudaDeviceSynchronize();
+            CHECK_GPU_ERR(cudaSetDevice(gpu_index));
+            CHECK_GPU_ERR(cudaDeviceSynchronize());
             
             for (int i = 0, e = *nodes[gpu_index].num_seeds; i < e; i++) {
                 fprintf(out_file, "%lld\n", nodes[gpu_index].seeds[i]);
