@@ -105,31 +105,24 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 
 
 
-#define TREE_X 4
-#define TREE_Z 3
-#define TREE_HEIGHT 6
+#define WATERFALL_X 15
+#define WATERFALL_Y 76
+#define WATERFALL_Z 10
 
-#define OTHER_TREE_COUNT 3
+#define TREE_X (WATERFALL_X - 5)
+#define TREE_Z (WATERFALL_Z - 8)
+#define TREE_HEIGHT 4
+
+#define OTHER_TREE_COUNT 1
 __device__ inline int getTreeHeight(int x, int z) {
     if (x == TREE_X && z == TREE_Z)
         return TREE_HEIGHT;
 
-    if (x == 1 && z == 13)
-        return 5;
-
-    if (x == 6 && z == 12)
-        return 6;
-
-    if (x == 14 && z == 7) {
-        return 5;
-    }
+    if (x == WATERFALL_X - 3 && z == WATERFALL_Z + 3)
+        return 4;
 
     return 0;
 }
-
-#define WATERFALL_X 9
-#define WATERFALL_Y 76
-#define WATERFALL_Z 1
 
 
 
