@@ -100,6 +100,7 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 #define advance_774(rand) advance(rand, 0xF8D900133F9LL, 0x5738CAC2F85ELL)
 #define advance_387(rand) advance(rand, 0x5FE2BCEF32B5LL, 0xB072B3BF0CBDLL)
 #define advance_16(rand) advance(rand, 0x6DC260740241LL, 0xD0352014D90LL)
+#define advance_2(rand) advance(rand, 0xBB20B4600A69LL, 0x40942DE6BALL)
 #define advance_m1(rand) advance(rand, 0xDFE05BCB1365LL, 0x615C0E462AA9LL)
 #define advance_m3759(rand) advance(rand, 0x63A9985BE4ADLL, 0xA9AA8DA9BC9BLL)
 
@@ -110,19 +111,15 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 #define TREE_HEIGHT 6
 
 #define OTHER_TREE_COUNT 3
-__device__ inline int getTreeHeight(int x, int z) {
-    if (x == TREE_X && z == TREE_Z)
-        return TREE_HEIGHT;
+__device__ inline int getOtherTreeFlag(int x, int z, int height) {
+    if (x == 1 && z == 13 && height == 5)
+        return 1;
 
-    if (x == 1 && z == 13)
-        return 5;
+    if (x == 6 && z == 12 && height == 6)
+        return 2;
 
-    if (x == 6 && z == 12)
-        return 6;
-
-    if (x == 14 && z == 7) {
-        return 5;
-    }
+    if (x == 14 && z == 7 && height == 5)
+        return 4;
 
     return 0;
 }
@@ -172,18 +169,22 @@ __device__ inline int getTreeHeight(int x, int z) {
 #define TOTAL_WORK_SIZE (SIZE_X * SIZE_Z)
 
 #define MAX_TREE_ATTEMPTS 12
-#define MAX_TREE_SEARCH_BACK (3 * MAX_TREE_ATTEMPTS - 3 + 16 * OTHER_TREE_COUNT)
+#define MAX_TREE_SEARCH_COUNT ((3 * MAX_TREE_ATTEMPTS - 3 + 16 * OTHER_TREE_COUNT) * 2)
+#define MAX_WATERFALL_SERACH_COUNT (387 * 5 + 4 * 50 + MAX_TREE_SEARCH_COUNT)
 
-__constant__ ulong search_back_multipliers[MAX_TREE_SEARCH_BACK + 1];
-__constant__ ulong search_back_addends[MAX_TREE_SEARCH_BACK + 1];
-int search_back_count;
+__constant__ ulong tree_search_multipliers[MAX_TREE_SEARCH_COUNT];
+__constant__ ulong tree_search_addends[MAX_TREE_SEARCH_COUNT];
+int tree_search_count;
+__constant__ ulong waterfall_search_multipliers[MAX_WATERFALL_SERACH_COUNT];
+__constant__ ulong waterfall_search_addends[MAX_WATERFALL_SERACH_COUNT];
+int waterfall_search_count;
 
 #define WORK_UNIT_SIZE (1LL << 23)
 #define BLOCK_SIZE 256
 
 
 
-__global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_search_back_count) {
+__global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_tree_search_count, int gpu_waterfall_search_count) {
     // lattice tree position
     ulong global_id = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -201,79 +202,36 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
     Random rand = (Random) ((lattice_x * L00 + lattice_z * L01 + X_TRANSLATE) % MODULUS);
     advance_m1(rand);
     Random tree_start = rand;
-    advance_m1(tree_start);
 
-    bool res = random_next(&rand, 4) == TREE_X;
-    res &= random_next(&rand, 4) == TREE_Z;
-    res &= random_next_int(&rand, 3) == (ulong) (TREE_HEIGHT - 4);
+    advance_2(rand); // x, z hopefully done by lattice
+    bool valid = random_next_int(&rand, 3) + 4 == TREE_HEIGHT;
 
+    int other_tree_flags = 0;
 
-    for (int treeBackCalls = 0; treeBackCalls <= gpu_search_back_count; treeBackCalls++) {
-        Random start = (tree_start * search_back_multipliers[treeBackCalls] + search_back_addends[treeBackCalls]) & RANDOM_MASK;
-        rand = start;
+    for (int i = 0; i < gpu_tree_search_count; i++) {
+        rand = (tree_start * tree_search_multipliers[i] + tree_search_addends[i]) & RANDOM_MASK;
+        int x = random_next(&rand, 4);
+        int z = random_next(&rand, 4);
+        int height = random_next_int(&rand, 3) + 4;
+        other_tree_flags |= getOtherTreeFlag(x, z, height);
+    }
 
-        bool this_res = res;
-        this_res &= random_next_int(&rand, 10) != 0;
+    valid &= other_tree_flags == (1 << OTHER_TREE_COUNT) - 1;
 
-        bool generated_tree[16][16];
-        memset(generated_tree, false, sizeof(generated_tree));
+    bool any_waterfall_matches = false;
+    for (int i = 0; i < gpu_waterfall_search_count; i++) {
+        rand = (tree_start * waterfall_search_multipliers[i] + waterfall_search_addends[i]) & RANDOM_MASK;
+        bool this_waterfall_matches = random_next(&rand, 4) == WATERFALL_X;
+        this_waterfall_matches &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
+        this_waterfall_matches &= random_next(&rand, 4) == WATERFALL_Z;
+        any_waterfall_matches |= this_waterfall_matches;
+    }
 
-        int treesMatched = 0;
-        bool any_population_matches = false;
-        for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
-            int treeX = random_next(&rand, 4);
-            int treeZ = random_next(&rand, 4);
-            int wantedTreeHeight = getTreeHeight(treeX, treeZ);
-            int treeHeight = random_next_int(&rand, 3) + 4;
-            if (treeHeight == wantedTreeHeight && !generated_tree[treeX][treeZ]) {
-                treesMatched++;
-                generated_tree[treeX][treeZ] = true;
-                advance_16(rand);
-            }
+    valid &= any_waterfall_matches;
 
-            if (treesMatched == OTHER_TREE_COUNT + 1) {
-                Random before_rest = rand;
-                // yellow flowers
-                advance_774(rand);
-                // red flowers
-                if (random_next(&rand, 1) == 0) {
-                    advance_387(rand);
-                }
-                // brown mushroom
-                if (random_next(&rand, 2) == 0) {
-                    advance_387(rand);
-                }
-                // red mushroom
-                if (random_next(&rand, 3) == 0) {
-                    advance_387(rand);
-                }
-                // reeds
-                advance_830(rand);
-                // pumpkins
-                if (random_next(&rand, 5) == 0) {
-                    advance_387(rand);
-                }
-
-                for (int i = 0; i < 50; i++) {
-                    bool waterfall_matches = random_next(&rand, 4) == WATERFALL_X;
-                    waterfall_matches &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
-                    waterfall_matches &= random_next(&rand, 4) == WATERFALL_Z;
-                    any_population_matches |= waterfall_matches;
-                }
-                rand = before_rest;
-            }
-        }
-
-        this_res &= any_population_matches;
-
-        Random start_chunk_rand = start;
-        advance_m3759(start_chunk_rand);
-        if (this_res) {
-            int index = atomicAdd(num_seeds, 1);
-            seeds[index] = start_chunk_rand;
-        }
-
-        advance_m1(start);
+    if (valid) {
+        int index = atomicAdd(num_seeds, 1);
+        seeds[index] = tree_start;
     }
 }
 
@@ -296,29 +254,31 @@ void setup_gpu_node(GPU_Node* node, int gpu) {
 }
 
 
-void calculate_search_backs() {
-    bool allow_search_back[MAX_TREE_SEARCH_BACK + 1];
-    memset(allow_search_back, false, sizeof(allow_search_back));
+void calculate_searches() {
+    bool allow_tree_search[MAX_TREE_SEARCH_COUNT + 1];
+    memset(allow_tree_search, false, sizeof(allow_tree_search));
 
     for (int i = 0; i <= MAX_TREE_ATTEMPTS - OTHER_TREE_COUNT - 1; i++) {
-        allow_search_back[i * 3] = true;
+        allow_tree_search[i * 3] = true;
     }
 
     for (int tree = 0; tree < OTHER_TREE_COUNT; tree++) {
-        for (int i = 0; i <= MAX_TREE_SEARCH_BACK - 19; i++) {
-            if (allow_search_back[i])
-                allow_search_back[i + 19] = true;
+        for (int i = 0; i <= MAX_TREE_SEARCH_COUNT - 19; i++) {
+            if (allow_tree_search[i])
+                allow_tree_search[i + 19] = true;
         }
     }
 
-    search_back_count = 0;
+    tree_search_count = 0;
     ulong multiplier = 1;
     ulong addend = 0;
-    ulong multipliers[MAX_TREE_SEARCH_BACK + 1];
-    ulong addends[MAX_TREE_SEARCH_BACK + 1];
-    for (int i = 0; i <= MAX_TREE_SEARCH_BACK; i++) {
-        if (allow_search_back[i]) {
-            int index = search_back_count++;
+    ulong multipliers[MAX_WATERFALL_SERACH_COUNT + 1];
+    ulong addends[MAX_WATERFALL_SERACH_COUNT + 1];
+
+    // backwards
+    for (int i = 0; i <= MAX_TREE_SEARCH_COUNT; i++) {
+        if (allow_tree_search[i]) {
+            int index = tree_search_count++;
             multipliers[index] = multiplier;
             addends[index] = addend;
         }
@@ -326,10 +286,56 @@ void calculate_search_backs() {
         addend = (0xDFE05BCB1365LL * addend + 0x615C0E462AA9LL) & RANDOM_MASK;
     }
 
+    // forwards
+    multiplier = 0x11117495BF5LL;
+    addend = 0x409AA63C700DLL;
+    for (int i = 0; i <= MAX_TREE_SEARCH_COUNT; i++) {
+        if (allow_tree_search[i]) {
+            int index = tree_search_count++;
+            multipliers[index] = multiplier;
+            addends[index] = addend;
+        }
+        multiplier = (multiplier * 0x5DEECE66DLL) & RANDOM_MASK;
+        addend = (0x5DEECE66DLL * addend + 0xBLL) & RANDOM_MASK;
+    }
+
     for (int gpu = 0; gpu < GPU_COUNT; gpu++) {
         CHECK_GPU_ERR(cudaSetDevice(gpu));
-        CHECK_GPU_ERR(cudaMemcpyToSymbol(search_back_multipliers, &multipliers, search_back_count * sizeof(*multipliers)));
-        CHECK_GPU_ERR(cudaMemcpyToSymbol(search_back_addends, &addends, search_back_count * sizeof(*addends)));
+        CHECK_GPU_ERR(cudaMemcpyToSymbol(tree_search_multipliers, &multipliers, tree_search_count * sizeof(*multipliers)));
+        CHECK_GPU_ERR(cudaMemcpyToSymbol(tree_search_addends, &addends, tree_search_count * sizeof(*addends)));
+    }
+
+
+    bool allow_waterfall_search[MAX_WATERFALL_SERACH_COUNT + 1];
+    memset(allow_waterfall_search, false, sizeof(allow_waterfall_search));
+
+    for (int tree = 0; tree <= MAX_TREE_SEARCH_COUNT; tree++) {
+        if (allow_tree_search[tree]) {
+            for (int waterfall_alignment = 0; waterfall_alignment <= 4; waterfall_alignment++) {
+                for (int waterfall = 0; waterfall < 50; waterfall++) {
+                    allow_waterfall_search[tree + 387 * waterfall_alignment + 4 * waterfall] = true;
+                }
+            }
+        }
+    }
+
+    waterfall_search_count = 0;
+    multiplier = 0x26FD89F9DA95LL;
+    addend = 0x905AB48D4435LL;
+    for (int i = 0; i <= MAX_WATERFALL_SERACH_COUNT; i++) {
+        if (allow_waterfall_search[i]) {
+            int index = waterfall_search_count++;
+            multipliers[index] = multiplier;
+            addends[index] = addend;
+        }
+        multiplier = (multiplier * 0x5DEECE66DLL) & RANDOM_MASK;
+        addend = (0x5DEECE66DLL * addend + 0xBLL) & RANDOM_MASK;
+    }
+
+    for (int gpu = 0; gpu < GPU_COUNT; gpu++) {
+        CHECK_GPU_ERR(cudaSetDevice(gpu));
+        CHECK_GPU_ERR(cudaMemcpyToSymbol(waterfall_search_multipliers, &multipliers, waterfall_search_count * sizeof(*multipliers)));
+        CHECK_GPU_ERR(cudaMemcpyToSymbol(waterfall_search_addends, &addends, waterfall_search_count * sizeof(*addends)));
     }
 }
 
@@ -339,7 +345,7 @@ int main() {
 #define int int32_t
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
-    calculate_search_backs();
+    calculate_searches();
 
     FILE* out_file = fopen("chunk_seeds.txt", "w");
 
@@ -355,7 +361,7 @@ int main() {
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
             CHECK_GPU_ERR(cudaSetDevice(gpu_index));
             *nodes[gpu_index].num_seeds = 0;
-            doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[gpu_index].num_seeds, nodes[gpu_index].seeds, search_back_count);
+            doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[gpu_index].num_seeds, nodes[gpu_index].seeds, tree_search_count, waterfall_search_count);
             offset += WORK_UNIT_SIZE;
         }
         
@@ -376,6 +382,7 @@ int main() {
         double speed = (double)numSearched / (double)timeElapsed / 1000000.0;
         double progress = (double)numSearched / (double)TOTAL_WORK_SIZE * 100.0;
         printf("Searched %lld seeds, found %lld matches. Time elapsed: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%\n", numSearched, count, timeElapsed, speed, progress);
+
     }
 
     fclose(out_file);
