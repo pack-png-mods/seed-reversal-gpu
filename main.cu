@@ -349,6 +349,7 @@ int main() {
 
     
     ulong count = 0;
+    clock_t lastIteration = clock();
     clock_t startTime = clock();
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
         
@@ -370,12 +371,14 @@ int main() {
             count += *nodes[gpu_index].num_seeds;
         }
         
-        double timeElapsed = (double)(clock() - startTime);
-        timeElapsed /= CLOCKS_PER_SEC;
+        double iterationTime = (double)(clock() - lastIteration) / CLOCKS_PER_SEC;
+        double timeElapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
+        lastIteration = clock();
         ulong numSearched = offset + WORK_UNIT_SIZE;
-        double speed = (double)numSearched / (double)timeElapsed / 1000000.0;
+        double speed = (double)WORK_UNIT_SIZE / (double)iterationTime / 1000000.0;
         double progress = (double)numSearched / (double)TOTAL_WORK_SIZE * 100.0;
-        printf("Searched %lld seeds, found %lld matches. Time elapsed: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%\n", numSearched, count, timeElapsed, speed, progress);
+        double estimatedTime = (double)(TOTAL_WORK_SIZE - numSearched) / (double) WORK_UNIT_SIZE * iterationTime / 3600.0;
+        printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1fh.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime);
     }
 
     fclose(out_file);
