@@ -350,7 +350,7 @@ int main() {
     
     ulong count = 0;
     clock_t lastIteration = clock();
-	clock_t startTime = clock();
+    clock_t startTime = clock();
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
         
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
@@ -372,12 +372,12 @@ int main() {
         }
         
         double iterationTime = (double)(clock() - lastIteration) / CLOCKS_PER_SEC;
-		double timeElapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
-		lastIteration = clock();
+        double timeElapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
+        lastIteration = clock();
         ulong numSearched = offset + WORK_UNIT_SIZE;
         double speed = (double)WORK_UNIT_SIZE / (double)iterationTime / 1000000.0;
         double progress = (double)numSearched / (double)TOTAL_WORK_SIZE * 100.0;
-		double estimatedTime = (double)(TOTAL_WORK_SIZE - numSearched) / (double) WORK_UNIT_SIZE * iterationTime / 3600.0;
+        double estimatedTime = (double)(TOTAL_WORK_SIZE - numSearched) / (double) WORK_UNIT_SIZE * iterationTime / 3600.0;
         printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1fh.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime);
     }
 
