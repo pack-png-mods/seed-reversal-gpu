@@ -218,8 +218,8 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
             int treeZ = random_next(&rand, 4);
             int wantedTreeHeight = getTreeHeight(treeX, treeZ);
             int treeHeight = random_next_int(&rand, 3) + 4;
-            if (!generated_tree[treeX][treeZ]) {
-                treesMatched += treeHeight == wantedTreeHeight;
+            if (treeHeight == wantedTreeHeight && !generated_tree[treeX][treeZ]) {
+                treesMatched++;
                 generated_tree[treeX][treeZ] = true;
                 advance_16(rand);
             }
