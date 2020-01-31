@@ -20,6 +20,7 @@
 #include <memory.h>
 #include <stdio.h>
 #include <time.h>
+#include <ctype.h>
 
 
 #define signed_seed_t int64_t
@@ -277,16 +278,11 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
     }
 }
 
-#define GPU_COUNT 1
-
-
-
 struct GPU_Node {
     int GPU;
     int* num_seeds;
     ulong* seeds;
 };
-GPU_Node nodes[GPU_COUNT];
 
 void setup_gpu_node(GPU_Node* node, int gpu) {
     CHECK_GPU_ERR(cudaSetDevice(gpu));
@@ -296,7 +292,7 @@ void setup_gpu_node(GPU_Node* node, int gpu) {
 }
 
 
-void calculate_search_backs() {
+void calculate_search_backs(int GPU_COUNT) {
     bool allow_search_back[MAX_TREE_SEARCH_BACK + 1];
     memset(allow_search_back, false, sizeof(allow_search_back));
 
@@ -335,11 +331,29 @@ void calculate_search_backs() {
 
 
 #undef int
-int main() {
+int main(int argc, char *argv[]) {
 #define int int32_t
+	int GPU_COUNT = 1;
+	GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
+	for (int i = 1; i < argc; i++) {
+		if (argv[i][0] == '-') {
+			switch(argv[i][1]) {
+				case 'g':
+					if(isdigit(argv[i][2])) GPU_COUNT = atoi(argv[i] + 2);
+				break;
+				default:
+					printf("Error: Flag not recognized.");
+					return -1;
+				break;
+			}
+		} else {
+			printf("Error: Please specify flag before argument.");
+			return -1;
+		}
+	}
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
-    calculate_search_backs();
+    calculate_search_backs(GPU_COUNT);
 
     FILE* out_file = fopen("chunk_seeds.txt", "w");
 
