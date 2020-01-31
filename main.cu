@@ -391,7 +391,7 @@ int main(int argc, char *argv[]) {
         ulong numSearched = offset + WORK_UNIT_SIZE * GPU_COUNT;
         double speed = (double)WORK_UNIT_SIZE * GPU_COUNT / (double)iterationTime / 1000000.0;
         double progress = (double)numSearched / (double)TOTAL_WORK_SIZE * 100.0;
-        double estimatedTime = (double)(TOTAL_WORK_SIZE - numSearched) / (double) WORK_UNIT_SIZE * GPU_COUNT * iterationTime / 3600.0;
+        double estimatedTime = (double)(TOTAL_WORK_SIZE - numSearched) / (double) (WORK_UNIT_SIZE * GPU_COUNT) * iterationTime / 3600.0;
         printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1fh.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime);
     }
 
