@@ -391,8 +391,20 @@ int main(int argc, char *argv[]) {
         ulong numSearched = offset + WORK_UNIT_SIZE * GPU_COUNT;
         double speed = (double)WORK_UNIT_SIZE * GPU_COUNT / (double)iterationTime / 1000000.0;
         double progress = (double)numSearched / (double)TOTAL_WORK_SIZE * 100.0;
-        double estimatedTime = (double)(TOTAL_WORK_SIZE - numSearched) / (double) (WORK_UNIT_SIZE * GPU_COUNT) * iterationTime / 3600.0;
-        printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1fh.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime);
+        double estimatedTime = (double)(TOTAL_WORK_SIZE - numSearched) / (double) (WORK_UNIT_SIZE * GPU_COUNT) * iterationTime;
+        char suffix = 's';
+        if (estimatedTime >= 3600) {
+            suffix = 'h';
+            estimatedTime /= 3600.0;
+        } else if (estimatedTime >= 60) {
+            suffix = 'm';
+            estimatedTime /= 60.0;
+        }
+        if (progress >= 100.0) {
+            estimatedTime = 0.0;
+            suffix = 's';
+        }
+        printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1f%c.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime, suffix);
     }
 
     fclose(out_file);
