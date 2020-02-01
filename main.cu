@@ -1,3 +1,4 @@
+
 // IDE indexing
 #ifdef __JETBRAINS_IDE__
 #define __host__
@@ -39,7 +40,7 @@
 #define RANDOM_ADDEND 0xBp-48
 #define RANDOM_SCALE 0x1p-48
 
-inline uint random_next(Random *random, int bits) {
+inline uint __host__ __device__  random_next(Random *random, int bits) {
   *random = trunc((*random * RANDOM_MULTIPLIER + RANDOM_ADDEND) * RANDOM_SCALE);
   return (uint)((ulong)(*random / RANDOM_SCALE) >> (48 - bits));
 }
@@ -188,8 +189,6 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
     // lattice tree position
     ulong global_id = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (offset + global_id >= TOTAL_WORK_SIZE) return;
-
     signed_seed_t lattice_x = (signed_seed_t) ((offset + global_id) % SIZE_X) + LOWER_X;
     signed_seed_t lattice_z = (signed_seed_t) ((offset + global_id) / SIZE_X) + LOWER_Z;
     lattice_z += (B_X * lattice_z < B_Z * lattice_x) * SIZE_Z;
@@ -199,22 +198,29 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
     }
     lattice_x += (signed_seed_t) (TREE_X * LI00 + TREE_Z * LI01);
     lattice_z += (signed_seed_t) (TREE_X * LI10 + TREE_Z * LI11);
-    Random rand = (Random) ((lattice_x * L00 + lattice_z * L01 + X_TRANSLATE) % MODULUS);
+    register Random rand = (Random) ((lattice_x * L00 + lattice_z * L01 + X_TRANSLATE) % MODULUS);
     advance_m1(rand);
     Random tree_start = rand;
     advance_m1(tree_start);
 
     bool res = random_next(&rand, 4) == TREE_X;
+    if(!res)
+        return;
     res &= random_next(&rand, 4) == TREE_Z;
+    if(!res)
+        return;
     res &= random_next_int(&rand, 3) == (ulong) (TREE_HEIGHT - 4);
-
+    if(!res)
+        return;
 
     for (int treeBackCalls = 0; treeBackCalls <= gpu_search_back_count; treeBackCalls++) {
-        Random start = (tree_start * search_back_multipliers[treeBackCalls] + search_back_addends[treeBackCalls]) & RANDOM_MASK;
+        register Random start = (tree_start * search_back_multipliers[treeBackCalls] + search_back_addends[treeBackCalls]) & RANDOM_MASK;
         rand = start;
 
-        bool this_res = res;
-        this_res &= random_next_int(&rand, 10) != 0;
+        bool this_res = true;
+
+        if(random_next_int(&rand, 10) == 0)
+            continue;
 
         char generated_tree[16][2];
         memset(generated_tree, 0x00, sizeof(generated_tree));
@@ -271,9 +277,10 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
 
         this_res &= any_population_matches;
 
-        Random start_chunk_rand = start;
-        advance_m3759(start_chunk_rand);
-        if (this_res) {
+        if (this_res && offset + global_id < TOTAL_WORK_SIZE) {
+            Random start_chunk_rand = start;
+            advance_m3759(start_chunk_rand);
+
             int index = atomicAdd(num_seeds, 1);
             seeds[index] = start_chunk_rand;
         }
@@ -344,11 +351,10 @@ int main(int argc, char *argv[]) {
             switch(argv[i][1]) {
                 case 'g':
                     if(isdigit(argv[i][2])) GPU_COUNT = atoi(argv[i] + 2);
-                break;
+                    break;
                 default:
                     printf("Error: Flag not recognized.");
                     return -1;
-                break;
             }
         } else {
             printf("Error: Please specify flag before argument.");
@@ -365,30 +371,30 @@ int main(int argc, char *argv[]) {
         setup_gpu_node(&nodes[i],i);
     }
 
-    
+
     ulong count = 0;
     clock_t lastIteration = clock();
     clock_t startTime = clock();
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
-        
+
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
             CHECK_GPU_ERR(cudaSetDevice(gpu_index));
             *nodes[gpu_index].num_seeds = 0;
             doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[gpu_index].num_seeds, nodes[gpu_index].seeds, search_back_count);
             offset += WORK_UNIT_SIZE;
         }
-        
+
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
             CHECK_GPU_ERR(cudaSetDevice(gpu_index));
             CHECK_GPU_ERR(cudaDeviceSynchronize());
-            
+
             for (int i = 0, e = *nodes[gpu_index].num_seeds; i < e; i++) {
                 fprintf(out_file, "%lld\n", nodes[gpu_index].seeds[i]);
             }
             fflush(out_file);
             count += *nodes[gpu_index].num_seeds;
         }
-        
+
         double iterationTime = (double)(clock() - lastIteration) / CLOCKS_PER_SEC;
         double timeElapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
         lastIteration = clock();
@@ -409,6 +415,7 @@ int main(int argc, char *argv[]) {
             suffix = 's';
         }
         printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1f%c.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime, suffix);
+
     }
 
     fclose(out_file);
