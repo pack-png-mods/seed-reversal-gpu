@@ -216,8 +216,8 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
         bool this_res = res;
         this_res &= random_next_int(&rand, 10) != 0;
 
-        bool generated_tree[16][16];
-        memset(generated_tree, false, sizeof(generated_tree));
+        char generated_tree[16][2];
+        memset(generated_tree, 0x00, sizeof(generated_tree));
 
         int treesMatched = 0;
         bool any_population_matches = false;
@@ -226,9 +226,13 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
             int treeZ = random_next(&rand, 4);
             int wantedTreeHeight = getTreeHeight(treeX, treeZ);
             int treeHeight = random_next_int(&rand, 3) + 4;
-            if (treeHeight == wantedTreeHeight && !generated_tree[treeX][treeZ]) {
+
+            char& boolpack = generated_tree[treeX][treeZ / 2];
+            const char mask = 1 << (treeZ % 8);
+
+            if (treeHeight == wantedTreeHeight && !(boolpack & mask)) {
                 treesMatched++;
-                generated_tree[treeX][treeZ] = true;
+                boolpack |= mask;
                 advance_16(rand);
             }
 
@@ -333,24 +337,24 @@ void calculate_search_backs(int GPU_COUNT) {
 #undef int
 int main(int argc, char *argv[]) {
 #define int int32_t
-	int GPU_COUNT = 1;
-	GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
-	for (int i = 1; i < argc; i++) {
-		if (argv[i][0] == '-') {
-			switch(argv[i][1]) {
-				case 'g':
-					if(isdigit(argv[i][2])) GPU_COUNT = atoi(argv[i] + 2);
-				break;
-				default:
-					printf("Error: Flag not recognized.");
-					return -1;
-				break;
-			}
-		} else {
-			printf("Error: Please specify flag before argument.");
-			return -1;
-		}
-	}
+    int GPU_COUNT = 1;
+    GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+            switch(argv[i][1]) {
+                case 'g':
+                    if(isdigit(argv[i][2])) GPU_COUNT = atoi(argv[i] + 2);
+                break;
+                default:
+                    printf("Error: Flag not recognized.");
+                    return -1;
+                break;
+            }
+        } else {
+            printf("Error: Please specify flag before argument.");
+            return -1;
+        }
+    }
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
     calculate_search_backs(GPU_COUNT);
