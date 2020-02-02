@@ -118,9 +118,9 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 __device__ inline bool addTreeFlags(int* flags, int x, int z, int height) {
     int old_flags = *flags;
     *flags |= (x == TREE_X && z == TREE_Z && height == TREE_HEIGHT);
-    *flags |= (x == 1 && z == 13 && height == 5) << 2;
-    *flags |= (x == 6 && z == 12 && height == 6) << 3;
-    *flags |= (x == 14 && z == 7 && height == 5) << 4;
+    *flags |= (x == 1 && z == 13 && height == 5) << 1;
+    *flags |= (x == 6 && z == 12 && height == 6) << 2;
+    *flags |= (x == 14 && z == 7 && height == 5) << 3;
     return *flags != old_flags;
 }
 
