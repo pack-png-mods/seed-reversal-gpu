@@ -113,21 +113,15 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 #define TREE_HEIGHT 6
 
 #define OTHER_TREE_COUNT 3
-__device__ inline int getTreeHeight(int x, int z) {
-    if (x == TREE_X && z == TREE_Z)
-        return TREE_HEIGHT;
 
-    if (x == 1 && z == 13)
-        return 5;
-
-    if (x == 6 && z == 12)
-        return 6;
-
-    if (x == 14 && z == 7) {
-        return 5;
-    }
-
-    return 0;
+// Adds to tree flags any tree matching the parameters, returns whether a tree was spawned
+__device__ inline bool addTreeFlags(int* flags, int x, int z, int height) {
+    int old_flags = *flags;
+    *flags |= (x == TREE_X && z == TREE_Z && height == TREE_HEIGHT);
+    *flags |= (x == 1 && z == 13 && height == 5) << 2;
+    *flags |= (x == 6 && z == 12 && height == 6) << 3;
+    *flags |= (x == 14 && z == 7 && height == 5) << 4;
+    return *flags != old_flags;
 }
 
 #define WATERFALL_X 9
@@ -227,27 +221,19 @@ __global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulo
             if(random_next_int(&rand, 10) == 0)
                 continue;
 
-            char generated_tree[16][2];
-            memset(generated_tree, 0x00, sizeof(generated_tree));
+            int treeFlags = 0;
 
-            int treesMatched = 0;
             bool any_population_matches = false;
             for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
                 int treeX = random_next(&rand, 4);
                 int treeZ = random_next(&rand, 4);
-                int wantedTreeHeight = getTreeHeight(treeX, treeZ);
                 int treeHeight = random_next_int(&rand, 3) + 4;
 
-                char& boolpack = generated_tree[treeX][treeZ / 2];
-                const char mask = 1 << (treeZ % 8);
-
-                if (treeHeight == wantedTreeHeight && !(boolpack & mask)) {
-                    treesMatched++;
-                    boolpack |= mask;
+                if (addTreeFlags(&treeFlags, treeX, treeZ, treeHeight)) {
                     advance_16(rand);
                 }
 
-                if (treesMatched == OTHER_TREE_COUNT + 1) {
+                if (treeFlags == ((1 << (OTHER_TREE_COUNT + 1)) - 1)) {
                     Random before_rest = rand;
                     // yellow flowers
                     advance_774(rand);
