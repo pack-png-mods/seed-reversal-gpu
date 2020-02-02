@@ -340,7 +340,6 @@ void calculate_search_backs(int GPU_COUNT) {
 int main(int argc, char *argv[]) {
 #define int int32_t
     int GPU_COUNT = 1;
-    GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
             switch(argv[i][1]) {
@@ -356,6 +355,7 @@ int main(int argc, char *argv[]) {
             return -1;
         }
     }
+    GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
     calculate_search_backs(GPU_COUNT);
