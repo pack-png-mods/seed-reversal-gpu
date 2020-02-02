@@ -108,7 +108,7 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 
 
 
-#define WATERFALL_X 10
+#define WATERFALL_X 9
 #define WATERFALL_Y 76
 #define WATERFALL_Z 10
 
@@ -123,7 +123,7 @@ __device__ inline bool addTreeFlags(int* flags, int x, int z, int height) {
     int old_flags = *flags;
     *flags |= (x == TREE_X && z == TREE_Z && height == TREE_HEIGHT);
     *flags |= (x == WATERFALL_X - 3 && z == WATERFALL_Z + 3 && height == 5) << 1;
-    *flags |= (x >= WATERFALL_X + 3 && (z <= WATERFALL_Z - 6 && z >= WATERFALL_Z - 9) && (height == 4 || height == 5)) << 2;
+    *flags |= ((x >= WATERFALL_X + 3 && x <= WATERFALL_X + 5) && (z <= WATERFALL_Z - 6 && z >= WATERFALL_Z - 9) && (height == 4 || height == 5)) << 2;
     return *flags != old_flags;
 }
 
