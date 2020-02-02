@@ -108,7 +108,7 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 
 
 
-#define WATERFALL_X 9
+#define WATERFALL_X 8
 #define WATERFALL_Y 76
 #define WATERFALL_Z 10
 
