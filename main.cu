@@ -71,6 +71,7 @@ __host__ __device__ inline uint random_next_int(Random *random, uint bound) {
     int r = random_next(random, 31);
     int m = bound - 1;
     if ((bound & m) == 0) {
+        // Could probably use __mul64hi here
         r = (uint)((bound * (ulong)r) >> 31);
     } else {
 #ifdef FAST_NEXT_INT
@@ -183,9 +184,7 @@ int search_back_count;
 #define WORK_UNIT_SIZE (1LL << 23)
 #define BLOCK_SIZE 256
 
-
-
-__global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_search_back_count) {
+__global__ void doPreWork(ulong offset, Random* starts, int* num_starts) {
     // lattice tree position
     ulong global_id = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -198,94 +197,101 @@ __global__ void doWork(ulong offset, int* num_seeds, ulong* seeds, int gpu_searc
     }
     lattice_x += (signed_seed_t) (TREE_X * LI00 + TREE_Z * LI01);
     lattice_z += (signed_seed_t) (TREE_X * LI10 + TREE_Z * LI11);
-    register Random rand = (Random) ((lattice_x * L00 + lattice_z * L01 + X_TRANSLATE) % MODULUS);
+
+    Random rand = (Random) ((lattice_x * L00 + lattice_z * L01 + X_TRANSLATE) % MODULUS);
     advance_m1(rand);
+
     Random tree_start = rand;
     advance_m1(tree_start);
 
     bool res = random_next(&rand, 4) == TREE_X;
-    if(!res)
-        return;
     res &= random_next(&rand, 4) == TREE_Z;
-    if(!res)
-        return;
     res &= random_next_int(&rand, 3) == (ulong) (TREE_HEIGHT - 4);
-    if(!res)
-        return;
 
-    for (int treeBackCalls = 0; treeBackCalls <= gpu_search_back_count; treeBackCalls++) {
-        register Random start = (tree_start * search_back_multipliers[treeBackCalls] + search_back_addends[treeBackCalls]) & RANDOM_MASK;
-        rand = start;
+    if(res) {
+        int index = atomicAdd(num_starts, 1);
+        starts[index] = tree_start;
+    }
+}
 
-        bool this_res = true;
+__global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulong* seeds, int gpu_search_back_count) {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < *num_starts; i += blockDim.x * gridDim.x) {
+        Random tree_start = tree_starts[i];
 
-        if(random_next_int(&rand, 10) == 0)
-            continue;
+        for (int treeBackCalls = 0; treeBackCalls <= gpu_search_back_count; treeBackCalls++) {
+            Random start = (tree_start * search_back_multipliers[treeBackCalls] + search_back_addends[treeBackCalls]) & RANDOM_MASK;
+            Random rand = start;
 
-        char generated_tree[16][2];
-        memset(generated_tree, 0x00, sizeof(generated_tree));
+            bool this_res = true;
 
-        int treesMatched = 0;
-        bool any_population_matches = false;
-        for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
-            int treeX = random_next(&rand, 4);
-            int treeZ = random_next(&rand, 4);
-            int wantedTreeHeight = getTreeHeight(treeX, treeZ);
-            int treeHeight = random_next_int(&rand, 3) + 4;
+            if(random_next_int(&rand, 10) == 0)
+                continue;
 
-            char& boolpack = generated_tree[treeX][treeZ / 2];
-            const char mask = 1 << (treeZ % 8);
+            char generated_tree[16][2];
+            memset(generated_tree, 0x00, sizeof(generated_tree));
 
-            if (treeHeight == wantedTreeHeight && !(boolpack & mask)) {
-                treesMatched++;
-                boolpack |= mask;
-                advance_16(rand);
+            int treesMatched = 0;
+            bool any_population_matches = false;
+            for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
+                int treeX = random_next(&rand, 4);
+                int treeZ = random_next(&rand, 4);
+                int wantedTreeHeight = getTreeHeight(treeX, treeZ);
+                int treeHeight = random_next_int(&rand, 3) + 4;
+
+                char& boolpack = generated_tree[treeX][treeZ / 2];
+                const char mask = 1 << (treeZ % 8);
+
+                if (treeHeight == wantedTreeHeight && !(boolpack & mask)) {
+                    treesMatched++;
+                    boolpack |= mask;
+                    advance_16(rand);
+                }
+
+                if (treesMatched == OTHER_TREE_COUNT + 1) {
+                    Random before_rest = rand;
+                    // yellow flowers
+                    advance_774(rand);
+                    // red flowers
+                    if (random_next(&rand, 1) == 0) {
+                        advance_387(rand);
+                    }
+                    // brown mushroom
+                    if (random_next(&rand, 2) == 0) {
+                        advance_387(rand);
+                    }
+                    // red mushroom
+                    if (random_next(&rand, 3) == 0) {
+                        advance_387(rand);
+                    }
+                    // reeds
+                    advance_830(rand);
+                    // pumpkins
+                    if (random_next(&rand, 5) == 0) {
+                        advance_387(rand);
+                    }
+
+                    for (int i = 0; i < 50; i++) {
+                        bool waterfall_matches = random_next(&rand, 4) == WATERFALL_X;
+                        waterfall_matches &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
+                        waterfall_matches &= random_next(&rand, 4) == WATERFALL_Z;
+                        any_population_matches |= waterfall_matches;
+                    }
+                    rand = before_rest;
+                }
             }
 
-            if (treesMatched == OTHER_TREE_COUNT + 1) {
-                Random before_rest = rand;
-                // yellow flowers
-                advance_774(rand);
-                // red flowers
-                if (random_next(&rand, 1) == 0) {
-                    advance_387(rand);
-                }
-                // brown mushroom
-                if (random_next(&rand, 2) == 0) {
-                    advance_387(rand);
-                }
-                // red mushroom
-                if (random_next(&rand, 3) == 0) {
-                    advance_387(rand);
-                }
-                // reeds
-                advance_830(rand);
-                // pumpkins
-                if (random_next(&rand, 5) == 0) {
-                    advance_387(rand);
-                }
+            this_res &= any_population_matches;
 
-                for (int i = 0; i < 50; i++) {
-                    bool waterfall_matches = random_next(&rand, 4) == WATERFALL_X;
-                    waterfall_matches &= random_next_int(&rand, random_next_int(&rand, 120) + 8) == WATERFALL_Y;
-                    waterfall_matches &= random_next(&rand, 4) == WATERFALL_Z;
-                    any_population_matches |= waterfall_matches;
-                }
-                rand = before_rest;
+            if (this_res) {
+                Random start_chunk_rand = start;
+                advance_m3759(start_chunk_rand);
+
+                int index = atomicAdd(num_seeds, 1);
+                seeds[index] = start_chunk_rand;
             }
+
+            advance_m1(start);
         }
-
-        this_res &= any_population_matches;
-
-        if (this_res && offset + global_id < TOTAL_WORK_SIZE) {
-            Random start_chunk_rand = start;
-            advance_m3759(start_chunk_rand);
-
-            int index = atomicAdd(num_seeds, 1);
-            seeds[index] = start_chunk_rand;
-        }
-
-        advance_m1(start);
     }
 }
 
@@ -293,6 +299,8 @@ struct GPU_Node {
     int GPU;
     int* num_seeds;
     ulong* seeds;
+    int* num_tree_starts;
+    Random* tree_starts;
 };
 
 void setup_gpu_node(GPU_Node* node, int gpu) {
@@ -300,6 +308,8 @@ void setup_gpu_node(GPU_Node* node, int gpu) {
     node->GPU = gpu;
     CHECK_GPU_ERR(cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds)));
     CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (1LL << 10))); // approx 1kb
+    CHECK_GPU_ERR(cudaMallocManaged(&node->num_tree_starts, sizeof(*node->num_tree_starts)));
+    CHECK_GPU_ERR(cudaMallocManaged(&node->tree_starts, (sizeof(Random)*WORK_UNIT_SIZE)));
 }
 
 
@@ -379,9 +389,22 @@ int main(int argc, char *argv[]) {
 
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
             CHECK_GPU_ERR(cudaSetDevice(gpu_index));
-            *nodes[gpu_index].num_seeds = 0;
-            doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[gpu_index].num_seeds, nodes[gpu_index].seeds, search_back_count);
+
+            *nodes[gpu_index].num_tree_starts = 0;
+            doPreWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (offset, nodes[gpu_index].tree_starts, nodes[gpu_index].num_tree_starts);
             offset += WORK_UNIT_SIZE;
+        }
+
+        for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
+            CHECK_GPU_ERR(cudaSetDevice(gpu_index));
+            CHECK_GPU_ERR(cudaDeviceSynchronize());
+        }
+
+        for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
+            CHECK_GPU_ERR(cudaSetDevice(gpu_index));
+
+            *nodes[gpu_index].num_seeds = 0;
+            doWork <<<WORK_UNIT_SIZE / BLOCK_SIZE, BLOCK_SIZE>>> (nodes[gpu_index].num_tree_starts, nodes[gpu_index].tree_starts, nodes[gpu_index].num_seeds, nodes[gpu_index].seeds, search_back_count);
         }
 
         for(int gpu_index = 0; gpu_index < GPU_COUNT; gpu_index++) {
