@@ -116,15 +116,15 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 #define TREE_Z (WATERFALL_Z - 8)
 #define TREE_HEIGHT 5
 
-#define OTHER_TREE_COUNT 1
-__device__ inline int getTreeHeight(int x, int z) {
-    if (x == TREE_X && z == TREE_Z)
-        return TREE_HEIGHT;
+#define OTHER_TREE_COUNT 2
 
-    if (x == WATERFALL_X - 3 && z == WATERFALL_Z + 3)
-        return 5;
-
-    return 0;
+// Adds to tree flags any tree matching the parameters, returns whether a tree was spawned
+__device__ inline bool addTreeFlags(int* flags, int x, int z, int height) {
+    int old_flags = *flags;
+    *flags |= (x == TREE_X && z == TREE_Z && height == TREE_HEIGHT);
+    *flags |= (x == WATERFALL_X - 3 && z == WATERFALL_Z + 3 && height == 5) << 1;
+    *flags |= (x >= WATERFALL_X + 3 && (z <= WATERFALL_Z - 6 && z >= WATERFALL_Z - 9) && (height == 4 || height == 5)) << 2;
+    return *flags != old_flags;
 }
 
 
@@ -220,27 +220,19 @@ __global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulo
             if(random_next_int(&rand, 10) == 0)
                 continue;
 
-            char generated_tree[16][2];
-            memset(generated_tree, 0x00, sizeof(generated_tree));
+            int treeFlags = 0;
 
-            int treesMatched = 0;
             bool any_population_matches = false;
             for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
                 int treeX = random_next(&rand, 4);
                 int treeZ = random_next(&rand, 4);
-                int wantedTreeHeight = getTreeHeight(treeX, treeZ);
                 int treeHeight = random_next_int(&rand, 3) + 4;
 
-                char& boolpack = generated_tree[treeX][treeZ / 2];
-                const char mask = 1 << (treeZ % 8);
-
-                if (treeHeight == wantedTreeHeight && !(boolpack & mask)) {
-                    treesMatched++;
-                    boolpack |= mask;
+                if (addTreeFlags(&treeFlags, treeX, treeZ, treeHeight)) {
                     advance_16(rand);
                 }
 
-                if (treesMatched == OTHER_TREE_COUNT + 1) {
+                if (treeFlags == ((1 << (OTHER_TREE_COUNT + 1)) - 1)) {
                     Random before_rest = rand;
                     // yellow flowers
                     advance_774(rand);
@@ -300,7 +292,7 @@ void setup_gpu_node(GPU_Node* node, int gpu) {
     CHECK_GPU_ERR(cudaSetDevice(gpu));
     node->GPU = gpu;
     CHECK_GPU_ERR(cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds)));
-    CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (1LL << 10))); // approx 1kb
+    CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (1LL << 20))); // approx 1MB
     CHECK_GPU_ERR(cudaMallocManaged(&node->num_tree_starts, sizeof(*node->num_tree_starts)));
     CHECK_GPU_ERR(cudaMallocManaged(&node->tree_starts, (sizeof(Random)*WORK_UNIT_SIZE)));
 }
