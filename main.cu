@@ -307,7 +307,7 @@ void setup_gpu_node(GPU_Node* node, int gpu) {
     CHECK_GPU_ERR(cudaSetDevice(gpu));
     node->GPU = gpu;
     CHECK_GPU_ERR(cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds)));
-    CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (1LL << 10))); // approx 1kb
+    CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (1LL << 20))); // approx 1MB
     CHECK_GPU_ERR(cudaMallocManaged(&node->num_tree_starts, sizeof(*node->num_tree_starts)));
     CHECK_GPU_ERR(cudaMallocManaged(&node->tree_starts, (sizeof(Random)*WORK_UNIT_SIZE)));
 }
@@ -355,7 +355,6 @@ void calculate_search_backs(int GPU_COUNT) {
 int main(int argc, char *argv[]) {
 #define int int32_t
     int GPU_COUNT = 1;
-    GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
             switch(argv[i][1]) {
@@ -371,6 +370,7 @@ int main(int argc, char *argv[]) {
             return -1;
         }
     }
+    GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
     calculate_search_backs(GPU_COUNT);
