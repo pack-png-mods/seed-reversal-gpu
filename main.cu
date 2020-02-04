@@ -94,8 +94,7 @@ __host__ __device__ inline int64_t random_next_long(Random *random) {
 #define advance_387(rand) advance(rand, 0x5FE2BCEF32B5LL, 0xB072B3BF0CBDLL)
 #define advance_16(rand) advance(rand, 0x6DC260740241LL, 0xD0352014D90LL)
 #define advance_m1(rand) advance(rand, 0xDFE05BCB1365LL, 0x615C0E462AA9LL)
-#define advance_m3759(rand) advance(rand, 0x63A9985BE4ADLL, 0xA9AA8DA9BC9BLL)
-#define advance_m3760(rand) advance(rand, ?, ?)
+#define advance_m3760(rand) advance(rand, 0x2DBFC2690F41LL, 0xB26D332614D0LL)
 
 /* LATTICE CONSTANTS */
 #define MODULUS (1LL << 48)
