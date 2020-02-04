@@ -75,7 +75,9 @@ __host__ __device__ inline uint random_next_int(Random *random, uint bound) {
 #ifdef FAST_NEXT_INT
         r %= bound;
 #else
-        for (int u = r; u - (r = u % bound) + m < 0; u = random_next(random, 31));
+        for (int u = r;
+             u - (r = u % bound) + m < 0;
+             u = random_next(random, 31));
 #endif
     }
     return r;
@@ -93,6 +95,7 @@ __host__ __device__ inline int64_t random_next_long(Random *random) {
 #define advance_16(rand) advance(rand, 0x6DC260740241LL, 0xD0352014D90LL)
 #define advance_m1(rand) advance(rand, 0xDFE05BCB1365LL, 0x615C0E462AA9LL)
 #define advance_m3759(rand) advance(rand, 0x63A9985BE4ADLL, 0xA9AA8DA9BC9BLL)
+#define advance_m3760(rand) advance(rand, ?, ?)
 
 /* LATTICE CONSTANTS */
 #define MODULUS (1LL << 48)
@@ -137,18 +140,34 @@ __host__ __device__ inline int64_t random_next_long(Random *random) {
 #define BLOCK_SIZE 256
 
 /* TREE/WATERFALL CONSTANTS */
+#define TREE_X 4
+#define TREE_Z 3
+#define TREE_HEIGHT 6
+#define OTHER_TREE_COUNT 3
+
 #define WATERFALL_X 9
 #define WATERFALL_Y 76
-#define WATERFALL_Z 10
-
-#define TREE_X (WATERFALL_X - 5)
-#define TREE_Z (WATERFALL_Z - 8)
-#define TREE_HEIGHT 5
-
-#define OTHER_TREE_COUNT 2
+#define WATERFALL_Z 1
 
 #define MAX_TREE_ATTEMPTS 12
 #define MAX_TREE_SEARCH_BACK (3 * MAX_TREE_ATTEMPTS - 3 + 16 * OTHER_TREE_COUNT)
+
+__device__ inline int getTreeHeight(int x, int z) {
+    if (x == TREE_X && z == TREE_Z)
+        return TREE_HEIGHT;
+
+    if (x == 1 && z == 13)
+        return 5;
+
+    if (x == 6 && z == 12)
+        return 6;
+
+    if (x == 14 && z == 7) {
+        return 5;
+    }
+
+    return 0;
+}
 
 __constant__ ulong search_back_multipliers[MAX_TREE_SEARCH_BACK + 1];
 __constant__ ulong search_back_addends[MAX_TREE_SEARCH_BACK + 1];
@@ -206,12 +225,11 @@ __global__ void doCalcRandStarts(int* num_tree_starts,
         for (int treeBackCalls = 0; treeBackCalls <= gpu_search_back_count; treeBackCalls++) {
             ulong multiplier = search_back_multipliers[treeBackCalls];
             ulong addend = search_back_addends[treeBackCalls];
-            Random start = (tree_start * multiplier + addend) & RANDOM_MASK;
 
-            Random rand = start;
+            Random rand = (tree_start * multiplier + addend) & RANDOM_MASK;
             if (random_next_int(&rand, 10) != 0) {
                 int index = atomicAdd(num_rand_starts, 1);
-                rand_starts[index] = start;
+                rand_starts[index] = rand;
             }
         }
     }
@@ -223,27 +241,28 @@ __global__ void doCalcChunkSeed(int* num_rand_starts,
                                 ulong* seeds) {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < *num_rand_starts; i += blockDim.x * gridDim.x) {
         Random rand = rand_starts[i];
-        Random start = rand;
-
-        // Advance 10
-        random_next_int(&rand, 10);
 
         char generated_tree[16][2];
         memset(generated_tree, 0x00, sizeof(generated_tree));
 
-        int treeFlags = 0;
+        int treesMatched = 0;
         bool any_population_matches = false;
         for (int treeAttempt = 0; treeAttempt <= MAX_TREE_ATTEMPTS; treeAttempt++) {
             int treeX = random_next(&rand, 4);
             int treeZ = random_next(&rand, 4);
+            int wantedTreeHeight = getTreeHeight(treeX, treeZ);
             int treeHeight = random_next_int(&rand, 3) + 4;
 
-            if (addTreeFlags(&treeFlags, treeX, treeZ, treeHeight)) {
+            char& boolpack = generated_tree[treeX][treeZ / 2];
+            const char mask = 1 << (treeZ % 8);
+
+            if (treeHeight == wantedTreeHeight && !(boolpack & mask)) {
+                treesMatched++;
+                boolpack |= mask;
                 advance_16(rand);
             }
 
-            if (treeFlags == ((1 << (OTHER_TREE_COUNT + 1)) - 1)) {
-
+			if (treesMatched == OTHER_TREE_COUNT + 1) {
                 Random before_rest = rand;
                 // yellow flowers
                 advance_774(rand);
@@ -270,14 +289,12 @@ __global__ void doCalcChunkSeed(int* num_rand_starts,
         }
 
         if (any_population_matches) {
-            Random start_chunk_rand = start;
-            advance_m3759(start_chunk_rand);
+            Random start_chunk_rand = rand;
+            advance_m3760(start_chunk_rand);
 
             int index = atomicAdd(num_seeds, 1);
             seeds[index] = start_chunk_rand;
         }
-
-        advance_m1(start);
     }
 }
 
@@ -359,19 +376,19 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
             switch (argv[i][1]) {
-            case 'g':
-                if (isdigit(argv[i][2])) GPU_COUNT = atoi(argv[i] + 2);
-                break;
-            default:
-                printf("Error: Flag not recognized.");
-                return -1;
+                case 'g':
+                    if (isdigit(argv[i][2])) GPU_COUNT = atoi(argv[i] + 2);
+                    break;
+                default:
+                    printf("Error: Flag not recognized.");
+                    return -1;
             }
         } else {
             printf("Error: Please specify flag before argument.");
             return -1;
         }
     }
-    GPU_Node *nodes = (GPU_Node *)malloc(sizeof(GPU_Node) * GPU_COUNT);
+    GPU_Node *nodes = (GPU_Node*)malloc(sizeof(GPU_Node) * GPU_COUNT);
     printf("Searching %lld total seeds...\n", TOTAL_WORK_SIZE);
 
     calculate_search_backs(GPU_COUNT);
