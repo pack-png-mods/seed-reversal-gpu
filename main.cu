@@ -108,7 +108,7 @@ inline void gpuAssert(cudaError_t code, const char* file, int line) {
 
 
 
-#define WATERFALL_X 11
+#define WATERFALL_X 16
 #define WATERFALL_Y 76
 #define WATERFALL_Z 10
 
@@ -241,6 +241,10 @@ __global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulo
                 }
 
                 if (treesMatched == OTHER_TREE_COUNT + 1) {
+                    // ignore waterfall (x coords 0 to 2)
+                    any_population_matches = true;
+
+                    /*
                     Random before_rest = rand;
                     // yellow flowers
                     advance_774(rand);
@@ -270,6 +274,7 @@ __global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulo
                         any_population_matches |= waterfall_matches;
                     }
                     rand = before_rest;
+                     */
                 }
             }
 
