@@ -242,7 +242,6 @@ __global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulo
 
                 if (treesMatched == OTHER_TREE_COUNT + 1) {
                     // ignore waterfall (x coords 0 to 2)
-                    any_population_matches = true;
 
                     /*
                     Random before_rest = rand;
@@ -278,7 +277,7 @@ __global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulo
                 }
             }
 
-            this_res &= any_population_matches;
+            this_res &= treesMatched >= OTHER_TREE_COUNT + 1;
 
             if (this_res) {
                 Random start_chunk_rand = start;
