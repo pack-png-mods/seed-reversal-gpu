@@ -238,7 +238,7 @@ __global__ void doWork(int* num_starts, Random* tree_starts, int* num_seeds, ulo
                 int wantedTreeHeight = getTreeHeight(treeX, treeZ);
                 int treeHeight = random_next_int(&rand, 3) + 4;
 
-                char& boolpack = generated_tree[treeX][treeZ / 2];
+                char& boolpack = generated_tree[treeX][treeZ / 8];
                 const char mask = 1 << (treeZ % 8);
 
                 if (treeHeight == wantedTreeHeight && !(boolpack & mask)) {
