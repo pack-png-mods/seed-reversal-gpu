@@ -304,7 +304,7 @@ void setup_gpu_node(GPU_Node* node, int gpu) {
     CHECK_GPU_ERR(cudaSetDevice(gpu));
     node->GPU = gpu;
     CHECK_GPU_ERR(cudaMallocManaged(&node->num_seeds, sizeof(*node->num_seeds)));
-    CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (1LL << 20))); // approx 1MB
+    CHECK_GPU_ERR(cudaMallocManaged(&node->seeds, (sizeof(Random)*WORK_UNIT_SIZE)));
     CHECK_GPU_ERR(cudaMallocManaged(&node->num_tree_starts, sizeof(*node->num_tree_starts)));
     CHECK_GPU_ERR(cudaMallocManaged(&node->tree_starts, (sizeof(Random)*WORK_UNIT_SIZE)));
 }
