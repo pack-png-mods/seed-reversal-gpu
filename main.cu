@@ -383,7 +383,6 @@ int main(int argc, char *argv[]) {
 
     ulong count = 0;
     ulong count_checker = 0;
-    //char snum[5];
     clock_t lastIteration = clock();
     clock_t startTime = clock();
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
@@ -440,8 +439,6 @@ int main(int argc, char *argv[]) {
         }
         if (count > count_checker){
             count_checker = count;
-            //itoa(count, snum, 10);
-            //printf("%s\n", snum);
             printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1f%c.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime, suffix);
         }
 
