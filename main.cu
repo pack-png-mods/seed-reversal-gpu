@@ -1,4 +1,3 @@
-// nvcc -o name C:\Users\johnj\Documents\GitHub\seed-reversal-gpu\main.cu
 // IDE indexing
 #ifdef __JETBRAINS_IDE__
 #define __host__
