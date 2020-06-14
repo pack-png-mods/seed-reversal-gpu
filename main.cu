@@ -39,7 +39,7 @@
 #define RANDOM_MULTIPLIER 0x5DEECE66Dp-48
 #define RANDOM_ADDEND 0xBp-48
 #define RANDOM_SCALE 0x1p-48
-
+// should be signed with int32_t (to verify)
 inline uint __host__ __device__  random_next(Random *random, int bits) {
   *random = trunc((*random * RANDOM_MULTIPLIER + RANDOM_ADDEND) * RANDOM_SCALE);
   return (uint)((ulong)(*random / RANDOM_SCALE) >> (48 - bits));
@@ -86,7 +86,7 @@ __host__ __device__ inline uint random_next_int(Random *random, uint bound) {
 }
 
 __host__ __device__ inline int64_t random_next_long (Random *random) {
-    return (((int64_t)random_next(random, 32)) << 32) + random_next(random, 32);
+    return (((int64_t)random_next(random, 32)) << 32) + (int32_t) random_next(random, 32);
 }
 
 #define CHECK_GPU_ERR(code) gpuAssert((code), __FILE__, __LINE__)
