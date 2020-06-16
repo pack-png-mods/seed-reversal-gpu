@@ -1,4 +1,3 @@
-
 // IDE indexing
 #ifdef __JETBRAINS_IDE__
 #define __host__
@@ -383,6 +382,7 @@ int main(int argc, char *argv[]) {
 
 
     ulong count = 0;
+    ulong count_checker = 0;
     clock_t lastIteration = clock();
     clock_t startTime = clock();
     for (ulong offset = 0; offset < TOTAL_WORK_SIZE;) {
@@ -437,7 +437,10 @@ int main(int argc, char *argv[]) {
             estimatedTime = 0.0;
             suffix = 's';
         }
-        printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1f%c.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime, suffix);
+        if (count > count_checker){
+            count_checker = count;
+            printf("Searched: %lld seeds. Found: %lld matches. Uptime: %.1fs. Speed: %.2fm seeds/s. Completion: %.3f%%. ETA: %.1f%c.\n", numSearched, count, timeElapsed, speed, progress, estimatedTime, suffix);
+        }
 
     }
 
